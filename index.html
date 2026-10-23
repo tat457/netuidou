@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>気化熱と凝固熱の不思議 - インタラクティブ分子シミュレーター</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            user-select: none;
+        }
+        canvas {
+            touch-action: none;
+        }
+        .glow-cyan {
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+        }
+        .glow-amber {
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+    <!-- Header -->
+    <header class="bg-slate-900/90 border-b border-slate-800 sticky top-0 z-50 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-gradient-to-tr from-cyan-500 to-amber-500 rounded-xl text-white font-bold text-xl">
+                    <i class="fa-solid font-bold fa-atom"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg md:text-xl font-bold bg-gradient-to-r from-cyan-400 via-teal-300 to-amber-400 bg-clip-text text-transparent">
+                        熱エネルギーの原理ラボ
+                    </h1>
+                    <p class="text-xs text-slate-400">分子運動から理解する「気化熱」と「凝固熱」</p>
+                </div>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div class="flex bg-slate-800 p-1 rounded-xl border border-slate-700 text-sm font-medium">
+                <button id="tabVapor" onclick="switchMode('vaporization')" class="px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 bg-cyan-600 text-white shadow-md">
+                    <i class="fa-solid fa-droplet-slash"></i> 気化熱 (吸熱)
+                </button>
+                <button id="tabSolid" onclick="switchMode('solidification')" class="px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 text-slate-400 hover:text-slate-200">
+                    <i class="fa-solid fa-snowflake"></i> 凝固熱 (発熱)
+                </button>
+                <button id="tabQuiz" onclick="switchMode('quiz')" class="px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 text-slate-400 hover:text-slate-200">
+                    <i class="fa-solid fa-lightbulb"></i> 身近な例・クイズ
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Column: Simulation Canvas & Controls -->
+        <div id="simContainer" class="lg:col-span-8 flex flex-col gap-4">
+            
+            <!-- Simulation Canvas Card -->
+            <div class="relative bg-slate-800/80 rounded-2xl border border-slate-700/80 overflow-hidden shadow-2xl flex flex-col">
+                
+                <!-- Canvas Overlay Status Banner -->
+                <div class="absolute top-4 left-4 right-4 flex justify-between items-center pointer-events-none z-10">
+                    <div id="statusBadge" class="bg-slate-900/80 backdrop-blur border border-cyan-500/40 text-cyan-300 text-xs md:text-sm font-semibold px-3 py-1.5 rounded-full flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                        <span id="statusText">気化熱モード：エネルギーの高い分子が脱出中</span>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <!-- Temp Gauges -->
+                        <div class="bg-slate-900/80 backdrop-blur border border-slate-700 px-3 py-1 rounded-lg text-xs flex items-center gap-2">
+                            <i class="fa-solid fa-temperature-three-quarters text-cyan-400"></i>
+                            <span>物質の温度: <strong id="substanceTemp" class="text-cyan-300 text-sm">25.0</strong> °C</span>
+                        </div>
+                        <div class="bg-slate-900/80 backdrop-blur border border-slate-700 px-3 py-1 rounded-lg text-xs flex items-center gap-2">
+                            <i class="fa-solid fa-house-fire text-amber-400"></i>
+                            <span>周囲の温度: <strong id="ambientTemp" class="text-amber-300 text-sm">25.0</strong> °C</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive Visual Canvas -->
+                <div class="relative w-full aspect-[16/10] bg-slate-950">
+                    <canvas id="simCanvas" class="w-full h-full block"></canvas>
+                    
+                    <!-- Energy Flow Vectors Overlay Label -->
+                    <div id="energyFlowLabel" class="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900/80 backdrop-blur px-4 py-1.5 rounded-full text-xs border border-slate-700 font-medium text-slate-300 pointer-events-none flex items-center gap-2">
+                        <i id="energyFlowIcon" class="fa-solid fa-arrow-down-long text-cyan-400 animate-bounce"></i>
+                        <span id="energyFlowText">熱エネルギーの流れ: 周囲 → 液体 (皮膚/周囲から熱を奪う)</span>
+                    </div>
+                </div>
+
+                <!-- Interactive Action Bar Under Canvas -->
+                <div class="bg-slate-900 p-4 border-t border-slate-800 flex flex-wrap gap-3 items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <button id="btnPlayPause" onclick="togglePlay()" class="bg-slate-800 hover:bg-slate-700 border border-slate-600 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 transition">
+                            <i id="playIcon" class="fa-solid fa-pause text-amber-400"></i> 一時停止
+                        </button>
+                        <button onclick="resetSim()" class="bg-slate-800 hover:bg-slate-700 border border-slate-600 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 transition">
+                            <i class="fa-solid fa-rotate-left text-slate-400"></i> リセット
+                        </button>
+                    </div>
+
+                    <!-- Mode Specific Interactive Triggers -->
+                    <div id="modeActionButtons" class="flex items-center gap-2 flex-wrap">
+                        <!-- Populated dynamically via JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Simulation Sliders & Adjustments -->
+            <div class="bg-slate-800/80 rounded-2xl p-5 border border-slate-700/80 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <div class="flex justify-between text-xs text-slate-300 font-medium mb-2">
+                        <label for="speedSlider"><i class="fa-solid fa-gauge-high text-cyan-400"></i> 分子運動（加熱 / 加速）</label>
+                        <span id="speedVal" class="text-cyan-400 font-mono">標準</span>
+                    </div>
+                    <input type="range" id="speedSlider" min="0.5" max="2.5" step="0.1" value="1.0" class="w-full accent-cyan-500 bg-slate-700 rounded-lg cursor-pointer h-2">
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs text-slate-300 font-medium mb-2">
+                        <label for="attractionSlider"><i class="fa-solid fa-magnet text-amber-400"></i> 分子間力 (引き合う力)</label>
+                        <span id="attractionVal" class="text-amber-400 font-mono">標準</span>
+                    </div>
+                    <input type="range" id="attractionSlider" min="0.2" max="2.0" step="0.1" value="1.0" class="w-full accent-amber-500 bg-slate-700 rounded-lg cursor-pointer h-2">
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Explanations & Molecular Mechanics -->
+        <div id="explainContainer" class="lg:col-span-4 flex flex-col gap-4">
+            
+            <!-- Dynamic Principle Explanation Card -->
+            <div class="bg-slate-800/80 rounded-2xl p-5 border border-slate-700/80 flex flex-col gap-4">
+                <div class="flex items-center gap-3 border-b border-slate-700/80 pb-3">
+                    <div id="conceptIconBg" class="p-3 bg-cyan-500/20 text-cyan-400 rounded-xl">
+                        <i id="conceptIcon" class="fa-solid fa-temperature-arrow-down text-2xl"></i>
+                    </div>
+                    <div>
+                        <h2 id="conceptTitle" class="font-bold text-lg text-white">気化熱のメカニズム</h2>
+                        <p id="conceptSubtitle" class="text-xs text-cyan-300">状態変化：液体 ➔ 気体 （吸熱反応）</p>
+                    </div>
+                </div>
+
+                <div id="conceptDetail" class="text-sm text-slate-300 leading-relaxed space-y-3">
+                    <!-- Populated dynamically via JavaScript -->
+                </div>
+            </div>
+
+            <!-- Core Insight Card (The "Aha!" moment) -->
+            <div id="insightCard" class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/80 rounded-2xl p-5 shadow-lg">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-amber-400 mb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-key"></i> 直感理解のキーポイント
+                </h3>
+                <p id="insightText" class="text-sm text-slate-200 leading-relaxed">
+                    「飛び足す速い分子」＝クラスで最も足の速い生徒が抜けると、残りの平均速度（温度）が下がるのと同じ原理です！
+                </p>
+            </div>
+
+            <!-- Real-world Application Highlight -->
+            <div class="bg-slate-800/80 rounded-2xl p-5 border border-slate-700/80">
+                <h3 class="text-sm font-bold text-slate-200 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-earth-asia text-teal-400"></i> 身近で活躍するこの現象
+                </h3>
+                <ul id="realWorldList" class="space-y-2.5 text-xs text-slate-300">
+                    <!-- Dynamic List -->
+                </ul>
+            </div>
+
+        </div>
+
+        <!-- Quiz View Container (Hidden initially) -->
+        <div id="quizContainer" class="hidden lg:col-span-12 space-y-6">
+            <div class="bg-slate-800/80 rounded-2xl p-6 border border-slate-700 max-w-4xl mx-auto">
+                <h2 class="text-xl font-bold text-amber-400 mb-4 flex items-center gap-3">
+                    <i class="fa-solid fa-circle-question"></i> 理解度チェック・クイズ
+                </h2>
+                <div id="quizContent" class="space-y-6">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-950 border-t border-slate-800 py-4 text-center text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-2">
+            <p>熱エネルギーと状態変化の科学シミュレーター &copy; 2026 Interactive Physics Lab</p>
+            <p class="text-slate-600">分子動力学ビジュアルモデル（気化熱・凝固熱）</p>
+        </div>
+    </footer>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // --- State Management ---
+        let mode = 'vaporization'; // 'vaporization' | 'solidification' | 'quiz'
+        let isRunning = true;
+        let animationFrameId = null;
+
+        // Canvas & Physics
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width = 0;
+        let height = 0;
+
+        // Simulation Variables
+        let particles = [];
+        let heatPulses = [];
+        let liquidTemp = 25.0; // °C
+        let ambientTemp = 25.0; // °C
+        let speedMultiplier = 1.0;
+        let attractionMultiplier = 1.0;
+        let isSupercooled = false;
+        let supercoolSeeded = false;
+
+        // Particle Class
+        class Particle {
+            constructor(x, y, state = 'LIQUID') {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = (Math.random() - 0.5) * 2;
+                this.radius = 8;
+                this.state = state; // 'LIQUID' | 'GAS' | 'SOLID'
+                this.targetX = x;
+                this.targetY = y;
+                this.id = Math.random();
+            }
+
+            get speed() {
+                return Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+            }
+
+            update(surfaceY) {
+                if (this.state === 'SOLID') {
+                    // Slight vibration in solid state
+                    const vib = (liquidTemp + 273) * 0.003 * speedMultiplier;
+                    this.x = this.targetX + (Math.random() - 0.5) * vib;
+                    this.y = this.targetY + (Math.random() - 0.5) * vib;
+                    this.vx = 0;
+                    this.vy = 0;
+                    return;
+                }
+
+                // Apply velocity
+                this.x += this.vx * speedMultiplier;
+                this.y += this.vy * speedMultiplier;
+
+                // Wall Collisions
+                if (this.x - this.radius < 20) {
+                    this.x = 20 + this.radius;
+                    this.vx *= -1;
+                }
+                if (this.x + this.radius > width - 20) {
+                    this.x = width - 20 - this.radius;
+                    this.vx *= -1;
+                }
+                if (this.y + this.radius > height - 20) {
+                    this.y = height - 20 - this.radius;
+                    this.vy *= -1;
+                }
+
+                if (mode === 'vaporization') {
+                    if (this.state === 'LIQUID') {
+                        // Intermolecular attraction pulling particles downwards/together
+                        const centerPull = (surfaceY + height - 20) / 2;
+                        this.vy += (this.y < centerPull ? 0.04 : -0.02) * attractionMultiplier;
+
+                        // Surface escape check
+                        if (this.y < surfaceY) {
+                            const speed = this.speed;
+                            const escapeThreshold = 2.2 / attractionMultiplier;
+
+                            if (speed > escapeThreshold) {
+                                // Escapes to Gas!
+                                this.state = 'GAS';
+                                createHeatPulse(this.x, this.y, 'COOL');
+                                // Escaping fast particle reduces liquid temp
+                                liquidTemp = Math.max(5.0, liquidTemp - 0.35);
+                            } else {
+                                // Bounces back down
+                                this.vy = Math.abs(this.vy) * 0.8;
+                                this.y = surfaceY + 2;
+                            }
+                        }
+                    } else if (this.state === 'GAS') {
+                        // Bounces off ceiling
+                        if (this.y - this.radius < 20) {
+                            this.y = 20 + this.radius;
+                            this.vy *= -1;
+                        }
+                    }
+                } else if (mode === 'solidification') {
+                    // Containment in liquid container
+                    if (this.y - this.radius < surfaceY) {
+                        this.y = surfaceY + this.radius;
+                        this.vy *= -1;
+                    }
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+
+                if (this.state === 'GAS') {
+                    ctx.fillStyle = '#38bdf8'; // Cyan bright gas
+                    ctx.shadowColor = '#38bdf8';
+                    ctx.shadowBlur = 12;
+                } else if (this.state === 'SOLID') {
+                    ctx.fillStyle = '#60a5fa'; // Deep blue ice crystal
+                    ctx.shadowColor = '#93c5fd';
+                    ctx.shadowBlur = 8;
+                } else {
+                    // Color based on kinetic energy
+                    const spd = this.speed;
+                    if (spd > 2.0) {
+                        ctx.fillStyle = '#f87171'; // High speed red
+                    } else if (spd > 1.0) {
+                        ctx.fillStyle = '#fbbf24'; // Medium amber
+                    } else {
+                        ctx.fillStyle = '#38bdf8'; // Cool cyan
+                    }
+                    ctx.shadowBlur = 0;
+                }
+
+                ctx.fill();
+                ctx.shadowBlur = 0; // Reset
+            }
+        }
+
+        // Heat Energy Pulse Visualizer
+        function createHeatPulse(x, y, type = 'HEAT') {
+            heatPulses.push({
+                x, y,
+                radius: 5,
+                maxRadius: 35,
+                alpha: 1.0,
+                type // 'HEAT' (red/gold release) or 'COOL' (blue absorption)
+            });
+        }
+
+        function updateAndDrawHeatPulses() {
+            for (let i = heatPulses.length - 1; i >= 0; i--) {
+                const p = heatPulses[i];
+                p.radius += 1.2;
+                p.alpha -= 0.03;
+
+                if (p.alpha <= 0) {
+                    heatPulses.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.lineWidth = 2;
+                if (p.type === 'HEAT') {
+                    ctx.strokeStyle = `rgba(245, 158, 11, ${p.alpha})`; // Released heat
+                } else {
+                    ctx.strokeStyle = `rgba(6, 182, 212, ${p.alpha})`; // Cool/absorbed
+                }
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        // Init Particles
+        function initParticles() {
+            particles = [];
+            heatPulses = [];
+            const surfaceY = height * 0.45;
+
+            if (mode === 'vaporization') {
+                liquidTemp = 25.0;
+                ambientTemp = 25.0;
+                // Create liquid molecules at bottom
+                for (let i = 0; i < 45; i++) {
+                    const x = 40 + Math.random() * (width - 80);
+                    const y = surfaceY + 20 + Math.random() * (height - surfaceY - 60);
+                    particles.push(new Particle(x, y, 'LIQUID'));
+                }
+            } else if (mode === 'solidification') {
+                liquidTemp = 20.0;
+                ambientTemp = 15.0;
+                isSupercooled = false;
+                supercoolSeeded = false;
+
+                // Create particles in liquid state
+                for (let i = 0; i < 48; i++) {
+                    const x = 40 + Math.random() * (width - 80);
+                    const y = surfaceY + 20 + Math.random() * (height - surfaceY - 60);
+                    particles.push(new Particle(x, y, 'LIQUID'));
+                }
+            }
+        }
+
+        // Resize Canvas dynamically
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            width = container.clientWidth;
+            height = container.clientHeight;
+            canvas.width = width;
+            canvas.height = height;
+            initParticles();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // --- Main Simulation Loop ---
+        function animate() {
+            if (isRunning) {
+                ctx.clearRect(0, 0, width, height);
+
+                const surfaceY = height * 0.45;
+
+                // Draw Container Boundaries
+                ctx.strokeStyle = '#334155';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(18, 18, width - 36, height - 36);
+
+                if (mode === 'vaporization') {
+                    // Draw Liquid Level Gradient
+                    const grad = ctx.createLinearGradient(0, surfaceY, 0, height - 20);
+                    grad.addColorStop(0, 'rgba(14, 165, 233, 0.2)');
+                    grad.addColorStop(1, 'rgba(3, 105, 161, 0.4)');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(20, surfaceY, width - 40, height - 20 - surfaceY);
+
+                    // Liquid surface line
+                    ctx.beginPath();
+                    ctx.moveTo(20, surfaceY);
+                    ctx.lineTo(width - 20, surfaceY);
+                    ctx.strokeStyle = '#38bdf8';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    // Heat compensation from surroundings
+                    if (liquidTemp < ambientTemp) {
+                        liquidTemp += 0.03; // Slowly warm back up from ambient heat
+                        ambientTemp -= 0.01; // Ambient cools slightly as it supplies heat
+                    }
+
+                } else if (mode === 'solidification') {
+                    // Draw container
+                    const grad = ctx.createLinearGradient(0, surfaceY, 0, height - 20);
+                    grad.addColorStop(0, 'rgba(59, 130, 246, 0.15)');
+                    grad.addColorStop(1, 'rgba(29, 78, 216, 0.3)');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(20, surfaceY, width - 40, height - 20 - surfaceY);
+
+                    // If cooling down to solidification threshold
+                    if (liquidTemp <= 0 && !isSupercooled && !supercoolSeeded) {
+                        triggerSolidificationStep();
+                    } else if (supercoolSeeded) {
+                        triggerSolidificationStep();
+                    }
+                }
+
+                // Inter-particle elastic collisions (Liquid/Gas)
+                for (let i = 0; i < particles.length; i++) {
+                    for (let j = i + 1; j < particles.length; j++) {
+                        const p1 = particles[i];
+                        const p2 = particles[j];
+
+                        if (p1.state === 'SOLID' && p2.state === 'SOLID') continue;
+
+                        const dx = p2.x - p1.x;
+                        const dy = p2.y - p1.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+
+                        if (dist < p1.radius + p2.radius) {
+                            // Simple speed swap simulation
+                            const tempVx = p1.vx;
+                            const tempVy = p1.vy;
+                            p1.vx = p2.vx;
+                            p1.vy = p2.vy;
+                            p2.vx = tempVx;
+                            p2.vy = tempVy;
+
+                            // Separate particles to avoid sticking
+                            const overlap = (p1.radius + p2.radius - dist) / 2;
+                            p1.x -= (dx / dist) * overlap;
+                            p1.y -= (dy / dist) * overlap;
+                            p2.x += (dx / dist) * overlap;
+                            p2.y += (dy / dist) * overlap;
+                        }
+                    }
+                }
+
+                // Update & Draw Particles
+                particles.forEach(p => {
+                    p.update(surfaceY);
+                    p.draw();
+                });
+
+                // Update & Draw Heat Effect Rings
+                updateAndDrawHeatPulses();
+
+                // Update HUD Text Values
+                document.getElementById('substanceTemp').innerText = liquidTemp.toFixed(1);
+                document.getElementById('ambientTemp').innerText = ambientTemp.toFixed(1);
+            }
+
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        // Gradual solidification process
+        function triggerSolidificationStep() {
+            const liquidParticles = particles.filter(p => p.state === 'LIQUID');
+            if (liquidParticles.length === 0) return;
+
+            // Pick 1-2 liquid particles to freeze into lattice grid
+            const targetP = liquidParticles[Math.floor(Math.random() * liquidParticles.length)];
+
+            // Calculate crystal grid target coordinate
+            const cols = 8;
+            const frozenCount = particles.filter(p => p.state === 'SOLID').length;
+            const col = frozenCount % cols;
+            const row = Math.floor(frozenCount / cols);
+
+            const gridStartX = width * 0.22;
+            const gridStartY = height * 0.52;
+            const spacing = 32;
+
+            targetP.state = 'SOLID';
+            targetP.targetX = gridStartX + col * spacing;
+            targetP.targetY = gridStartY + row * spacing;
+
+            // RELEASE LATENT HEAT OF SOLIDIFICATION!
+            createHeatPulse(targetP.x, targetP.y, 'HEAT');
+            
+            // Solidification releases latent heat, warming the substance/environment!
+            liquidTemp += 0.45;
+            ambientTemp += 0.25;
+        }
+
+        // --- Controls & Sliders ---
+        document.getElementById('speedSlider').addEventListener('input', (e) => {
+            speedMultiplier = parseFloat(e.target.value);
+            document.getElementById('speedVal').innerText = speedMultiplier > 1.5 ? '高速 (加熱)' : speedMultiplier < 0.8 ? '低速 (冷却)' : '標準';
+        });
+
+        document.getElementById('attractionSlider').addEventListener('input', (e) => {
+            attractionMultiplier = parseFloat(e.target.value);
+            document.getElementById('attractionVal').innerText = attractionMultiplier > 1.4 ? '強力' : attractionMultiplier < 0.7 ? '微弱' : '標準';
+        });
+
+        function togglePlay() {
+            isRunning = !isRunning;
+            const playIcon = document.getElementById('playIcon');
+            if (isRunning) {
+                playIcon.className = 'fa-solid fa-pause text-amber-400';
+            } else {
+                playIcon.className = 'fa-solid fa-play text-emerald-400';
+            }
+        }
+
+        function resetSim() {
+            initParticles();
+        }
+
+        // Mode Switching
+        function switchMode(newMode) {
+            mode = newMode;
+
+            // Update Tab Highlight
+            document.getElementById('tabVapor').className = mode === 'vaporization' ?
+                'px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 bg-cyan-600 text-white shadow-md' :
+                'px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 text-slate-400 hover:text-slate-200';
+
+            document.getElementById('tabSolid').className = mode === 'solidification' ?
+                'px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 bg-amber-600 text-white shadow-md' :
+                'px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 text-slate-400 hover:text-slate-200';
+
+            document.getElementById('tabQuiz').className = mode === 'quiz' ?
+                'px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 bg-teal-600 text-white shadow-md' :
+                'px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 text-slate-400 hover:text-slate-200';
+
+            const simContainer = document.getElementById('simContainer');
+            const explainContainer = document.getElementById('explainContainer');
+            const quizContainer = document.getElementById('quizContainer');
+
+            if (mode === 'quiz') {
+                simContainer.classList.add('hidden');
+                explainContainer.classList.add('hidden');
+                quizContainer.classList.remove('hidden');
+                renderQuiz();
+            } else {
+                simContainer.classList.remove('hidden');
+                explainContainer.classList.remove('hidden');
+                quizContainer.classList.add('hidden');
+                updateExplanationUI();
+                updateActionButtonsUI();
+                initParticles();
+            }
+        }
+
+        // Update Explanations Panel based on Active Mode
+        function updateExplanationUI() {
+            const title = document.getElementById('conceptTitle');
+            const subtitle = document.getElementById('conceptSubtitle');
+            const detail = document.getElementById('conceptDetail');
+            const iconBg = document.getElementById('conceptIconBg');
+            const icon = document.getElementById('conceptIcon');
+            const statusText = document.getElementById('statusText');
+            const statusBadge = document.getElementById('statusBadge');
+            const flowText = document.getElementById('energyFlowText');
+            const flowIcon = document.getElementById('energyFlowIcon');
+            const insightText = document.getElementById('insightText');
+            const realWorldList = document.getElementById('realWorldList');
+
+            if (mode === 'vaporization') {
+                title.innerText = '気化熱 (蒸発熱) の原理';
+                subtitle.innerText = '状態変化：液体 ➔ 気体 （吸熱反応）';
+                iconBg.className = 'p-3 bg-cyan-500/20 text-cyan-400 rounded-xl';
+                icon.className = 'fa-solid fa-temperature-arrow-down text-2xl';
+
+                statusBadge.className = 'bg-slate-900/80 backdrop-blur border border-cyan-500/40 text-cyan-300 text-xs md:text-sm font-semibold px-3 py-1.5 rounded-full flex items-center gap-2';
+                statusText.innerText = '気化熱モード：最も運動速度の速い分子が脱出中';
+
+                flowIcon.className = 'fa-solid fa-arrow-down-long text-cyan-400 animate-bounce';
+                flowText.innerText = '熱エネルギーの流れ: 周囲 ➔ 液体 (接触面から熱を奪う)';
+
+                detail.innerHTML = `
+                    <p>液体中の分子は常にランダムに運動しています。その中で<strong>「特に高いエネルギー（超高速）を持つ分子」</strong>だけが、分子間の引っ張り合う力（分子間力）を振り切って気体へと飛び出します。</p>
+                    <p class="border-l-2 border-cyan-400 pl-3 text-cyan-200">
+                        足の速い（高エネルギー）分子だけが外へ逃げ出すため、<strong>液体の残りの分子の平均速度（＝温度）が下がります。</strong>
+                    </p>
+                    <p>冷えた液体は、触れている皮膚や周囲の空気から熱を奪おうとするため、ひんやり冷たく感じます。</p>
+                `;
+
+                insightText.innerText = '「最速ランナーたちがグループを抜けると、チーム全体の平均スピード（温度）が低下する」と考えると直感的に分かります！';
+
+                realWorldList.innerHTML = `
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-check text-cyan-400 mt-0.5"></i>
+                        <span><strong>汗・犬のハァハァ:</strong> 体表の水分が蒸発するときに体熱を奪い体温を下げる。</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-check text-cyan-400 mt-0.5"></i>
+                        <span><strong>打ち水:</strong> 道路に水をまくと、水が気化するときに路面の熱を奪い涼しくなる。</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-check text-cyan-400 mt-0.5"></i>
+                        <span><strong>アルコール消毒:</strong> 水よりも蒸発しやすい（気化熱が大きい）ため、手に塗ると強くひんやり感じる。</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-check text-cyan-400 mt-0.5"></i>
+                        <span><strong>エアコン（クーラー）:</strong> 室内の熱を冷媒に吸収させ、屋外へ放出する繰り返し。</span>
+                    </li>
+                `;
+            } else if (mode === 'solidification') {
+                title.innerText = '凝固熱 (結氷熱) の原理';
+                subtitle.innerText = '状態変化：液体 ➔ 固体 （発熱反応）';
+                iconBg.className = 'p-3 bg-amber-500/20 text-amber-400 rounded-xl';
+                icon.className = 'fa-solid fa-temperature-arrow-up text-2xl';
+
+                statusBadge.className = 'bg-slate-900/80 backdrop-blur border border-amber-500/40 text-amber-300 text-xs md:text-sm font-semibold px-3 py-1.5 rounded-full flex items-center gap-2';
+                statusText.innerText = '凝固熱モード：分子が整列して固まるとき熱を放出';
+
+                flowIcon.className = 'fa-solid fa-arrow-up-long text-amber-400 animate-bounce';
+                flowText.innerText = '熱エネルギーの流れ: 物質 ➔ 周囲 (結合時に余ったエネルギーを放出)';
+
+                detail.innerHTML = `
+                    <p>液体の中では分子が自由に動き回っています（高い運動・位置エネルギー）。温度が下がり固体になるとき、分子は整列してカッチリした結晶構造を作ります。</p>
+                    <p class="border-l-2 border-amber-400 pl-3 text-amber-200">
+                        自由に動き回っていたときの<strong>エネルギーが「結晶の結合」によって余り、外へ一気に熱として放出</strong>されます。これが「凝固熱」です。
+                    </p>
+                    <p>水が氷になるときにも、実は周囲へ熱を放散しています。</p>
+                `;
+
+                insightText.innerText = '「元気に走り回っていた子供たちが、椅子に座って静着するときに、抱えていたエネルギーを周囲へパッと発散する」イメージです！';
+
+                realWorldList.innerHTML = `
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-check text-amber-400 mt-0.5"></i>
+                        <span><strong>エコカイロ（酢酸ナトリウム）:</strong> 液体から一気に結晶化するときに出る「凝固熱」で温かくなるカイロ。</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-check text-amber-400 mt-0.5"></i>
+                        <span><strong>果樹園の「散水氷結法」:</strong> 氷点下の日、果樹に水をまいてワザと凍らせることで、出る凝固熱で新芽を霜枯れから守る！</span>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <i class="fa-solid fa-check text-amber-400 mt-0.5"></i>
+                        <span><strong>雪が降ると少し暖かく感じられる現象:</strong> 水蒸気が氷（雪）になるときに大量の潜熱を大気へ放出するため。</span>
+                    </li>
+                `;
+            }
+        }
+
+        // Dynamic Action Buttons below Canvas
+        function updateActionButtonsUI() {
+            const container = document.getElementById('modeActionButtons');
+            if (mode === 'vaporization') {
+                container.innerHTML = `
+                    <button onclick="applyAlcoholEffect()" class="bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white font-bold px-4 py-2 rounded-xl text-xs md:text-sm flex items-center gap-2 shadow-lg transition">
+                        <i class="fa-solid fa-spray-can"></i> アルコールを塗る（急激な気化）
+                    </button>
+                `;
+            } else if (mode === 'solidification') {
+                container.innerHTML = `
+                    <button onclick="triggerCoolingToFreeze()" class="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold px-3 py-2 rounded-xl text-xs md:text-sm flex items-center gap-1.5 shadow-lg transition">
+                        <i class="fa-solid fa-snowflake"></i> 0°Cまで冷却
+                    </button>
+                    <button onclick="triggerSupercooling()" class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold px-3 py-2 rounded-xl text-xs md:text-sm flex items-center gap-1.5 shadow-lg transition">
+                        <i class="fa-solid fa-vial"></i> 過冷却状態を作る (-5°C)
+                    </button>
+                    <button id="btnSeed" onclick="seedSupercool()" class="hidden bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black px-3 py-2 rounded-xl text-xs md:text-sm items-center gap-1.5 shadow-lg animate-bounce transition">
+                        <i class="fa-solid fa-hand-pointer"></i> 刺激を与える（一気に結氷！）
+                    </button>
+                `;
+            }
+        }
+
+        // Action Interactions
+        function applyAlcoholEffect() {
+            // Accelerate liquid molecules & escape
+            particles.forEach(p => {
+                if (p.state === 'LIQUID') {
+                    p.vx *= 1.8;
+                    p.vy *= 1.8;
+                }
+            });
+            liquidTemp = Math.max(2.0, liquidTemp - 8.0);
+        }
+
+        function triggerCoolingToFreeze() {
+            liquidTemp = -2.0;
+            isSupercooled = false;
+            supercoolSeeded = false;
+        }
+
+        function triggerSupercooling() {
+            liquidTemp = -6.0;
+            isSupercooled = true;
+            supercoolSeeded = false;
+            document.getElementById('statusText').innerText = '過冷却状態：0°C以下でも凍らない不安定な状態！';
+            
+            const btnSeed = document.getElementById('btnSeed');
+            if (btnSeed) {
+                btnSeed.classList.remove('hidden');
+                btnSeed.classList.add('flex');
+            }
+        }
+
+        function seedSupercool() {
+            if (isSupercooled) {
+                supercoolSeeded = true;
+                isSupercooled = false;
+                document.getElementById('statusText').innerText = '衝撃により一気に結晶化！大量の凝固熱が発生！';
+                const btnSeed = document.getElementById('btnSeed');
+                if (btnSeed) btnSeed.classList.add('hidden');
+            }
+        }
+
+        // --- Interactive Quiz Section ---
+        const quizData = [
+            {
+                question: "1. 夏場に道路へ「打ち水」をすると涼しくなるのはなぜでしょうか？",
+                options: [
+                    "水が冷たいので、道路の温度を直接吸収して消滅するから",
+                    "撒いた水が蒸発（気化）するときに、周囲の地面から大きな熱（気化熱）を奪うから",
+                    "水が気体になるときに、酸素を放出して冷やすから"
+                ],
+                answer: 1,
+                explanation: "正解は「蒸発するときに熱を奪うから」です！液体から気体になるとき、速い分子が逃げ出すため周囲から熱エネルギー（気化熱）を取り込みます。"
+            },
+            {
+                question: "2. 果樹園で寒い夜、リンゴやみかんの芽に「水を噴射してあえて凍らせる（散水氷結法）」理由は？",
+                options: [
+                    "水が凍る（凝固する）ときに「凝固熱」を出し、芽の周囲を温めるため",
+                    "氷の膜で風を遮断するだけで、熱の出入りはないため",
+                    "凍らせることで果実の砂糖分が増えるから"
+                ],
+                answer: 0,
+                explanation: "正解は「水が凍るときに凝固熱を放出して芽を温めるため」です！一見逆効果に見えますが、水が固まるときに出す結晶化のエネルギーを利用して作物 inte 守っています。"
+            },
+            {
+                question: "3. 手に消毒用アルコールをつけると、水をつけるよりも「ひんやり」感じるのはなぜ？",
+                options: [
+                    "アルコールが皮膚の脂肪分と反応して冷却物質を作るから",
+                    "アルコールは水よりも分子間力が弱く、非常に蒸発しやすい（気化熱を急速に奪う）から",
+                    "アルコール自体の温度が常に水より低いから"
+                ],
+                answer: 1,
+                explanation: "正解は「水より蒸発しやすいため」です。アルコールは分子同士の結合が弱く低い温度でも一気に気化するため、短時間に一気に皮膚の熱を奪います。"
+            }
+        ];
+
+        function renderQuiz() {
+            const container = document.getElementById('quizContent');
+            container.innerHTML = quizData.map((q, idx) => `
+                <div class="bg-slate-900/90 p-5 rounded-xl border border-slate-700/80 space-y-4">
+                    <h3 class="font-bold text-base text-slate-100">${q.question}</h3>
+                    <div class="space-y-2">
+                        ${q.options.map((opt, optIdx) => `
+                            <button onclick="checkAnswer(${idx}, ${optIdx})" id="q${idx}_opt${optIdx}" class="w-full text-left p-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm text-slate-200 transition flex items-center justify-between">
+                                <span>${opt}</span>
+                                <i class="fa-regular fa-circle text-slate-500"></i>
+                            </button>
+                        `).join('')}
+                    </div>
+                    <div id="q${idx}_feedback" class="hidden p-3 rounded-lg text-xs leading-relaxed"></div>
+                </div>
+            `).join('');
+        }
+
+        function checkAnswer(qIdx, selectedOpt) {
+            const q = quizData[qIdx];
+            const feedbackEl = document.getElementById(`q${qIdx}_feedback`);
+
+            // Highlight chosen buttons
+            q.options.forEach((_, optIdx) => {
+                const btn = document.getElementById(`q${qIdx}_opt${optIdx}`);
+                btn.disabled = true;
+                btn.className = 'w-full text-left p-3 rounded-lg border text-sm transition flex items-center justify-between ' + 
+                    (optIdx === q.answer ? 'bg-emerald-950/60 border-emerald-500 text-emerald-200' : 
+                     optIdx === selectedOpt ? 'bg-rose-950/60 border-rose-500 text-rose-200' : 'bg-slate-800/40 border-slate-800 text-slate-500');
+            });
+
+            feedbackEl.classList.remove('hidden');
+            if (selectedOpt === q.answer) {
+                feedbackEl.className = 'p-3 rounded-lg text-xs leading-relaxed bg-emerald-900/40 border border-emerald-500/50 text-emerald-200';
+                feedbackEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400 mr-1"></i> <strong>正解！</strong> ${q.explanation}`;
+            } else {
+                feedbackEl.className = 'p-3 rounded-lg text-xs leading-relaxed bg-rose-900/40 border border-rose-500/50 text-rose-200';
+                feedbackEl.innerHTML = `<i class="fa-solid fa-circle-xmark text-rose-400 mr-1"></i> <strong>惜しい！</strong> ${q.explanation}`;
+            }
+        }
+
+        // --- Initialization ---
+        window.onload = () => {
+            resizeCanvas();
+            updateExplanationUI();
+            updateActionButtonsUI();
+            animate();
+        };
+    </script>
+</body>
+</html>
